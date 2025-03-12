@@ -1,0 +1,5 @@
+python train.py --start_epoch 55 --num_epochs 2 --device cuda --batch_size 16 --img_size 512 --notify True
+python test.py --chkpt_no 55 --num_chkpts 6 --num_samples 2 --img_size 512 --save_imgs True --notify True
+python validate.py --chkpt_no 55 --num_chkpts  --device cuda --batch_size 16 --img_size 512 --notify True
+python src/utils/plot_metrics.py --notify True
+python src/utils/notify_me.py --chkpt_no 46 --num_samples 2 --send_imgs True --send_train_logs True --send_val_logs True --send_chart True
