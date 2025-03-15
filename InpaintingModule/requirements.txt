@@ -1,0 +1,15 @@
+torch
+torchvision
+torch-fidelity
+torchsummary
+matplotlib
+numpy
+pandas
+pillow
+tqdm
+python-telegram-bot
+transformers
+timm
+onnx
+onnxruntime
+streamlit
