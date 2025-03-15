@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/jupyter/InpaintingModule")
+sys.path.append("../")
 
 import os
 import torch
