@@ -3,9 +3,6 @@ import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 import numpy as np
-import cv2
-import base64
-from io import BytesIO
 from utils import download_image, mask_to_json, zip_results, list_all_files, RESULT_FOLDER, RESULT_ZIP
 
 result_folder = os.path.join(RESULT_FOLDER, "draw_mask")
@@ -18,8 +15,9 @@ if upload_browse == "Upload":
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"], key="img") 
     mask_file = st.file_uploader("Choose a mask...", type=["png"], key="mask")
 elif upload_browse == "Browse":
-    uploaded_file = st.selectbox("Select an image to draw on:", list_all_files(result_folder), key="img")
-    mask_file = st.selectbox("Select a mask to update:", list_all_files(result_folder), key="mask")
+    options = list_all_files(result_folder)
+    uploaded_file = st.selectbox("Select an image to update:", options, key="img")
+    mask_file = st.selectbox("Select a mask to update:", options, key="mask")
 
 if uploaded_file is not None:
     # Open and resize the background image
@@ -29,6 +27,7 @@ if uploaded_file is not None:
     st.write("Draw a mask on the image:")
     
     # Canvas parameters
+    background_image = Image.open(os.path.join(result_folder, "uploaded_image.jpg"))
     stroke_width = st.slider("Stroke width: ", 1, 25, 3)
     stroke_color = st.color_picker("Stroke color: ", "#ffffff")
     bg_color = st.color_picker("Background color: ", "#000000")
@@ -49,7 +48,7 @@ if uploaded_file is not None:
         stroke_width=stroke_width,
         stroke_color=stroke_color,
         background_color=bg_color,
-        background_image=image,
+        background_image=background_image,
         initial_drawing=initial_drawing,
         update_streamlit=True,
         height=image.height,
@@ -61,7 +60,7 @@ if uploaded_file is not None:
     # Extract the modified mask from the canvas result
     if canvas_result.image_data is not None:
         # Here we assume the alpha channel holds the drawn mask
-        mask_data = canvas_result.image_data[:, :, 3]
+        mask_data = canvas_result.image_data[:, :, 3].astype(np.uint8)
         st.write("Extracted Mask:")
         st.image(mask_data, caption="Extracted Mask", use_container_width=True)
         

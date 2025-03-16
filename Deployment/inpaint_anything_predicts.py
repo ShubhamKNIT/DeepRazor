@@ -73,11 +73,3 @@ def make_inference(image_path, mask_path, onnx_model_path, save_folder):
     Image.fromarray(tensor_to_image(refined_in_output[0])).save(os.path.join(save_folder, "refined_in_output.jpg"))
     Image.fromarray(tensor_to_image(coarse_output[0])).save(os.path.join(save_folder, "coarse_output.jpg"))
     Image.fromarray(tensor_to_image(refined_output[0])).save(os.path.join(save_folder, "refined_output.jpg"))
-
-if __name__ == "__main__":
-    image_path = "path/to/image.jpg"
-    mask_path = "path/to/mask.jpg"
-    onnx_model_path = "path/to/onnx_model.onnx"
-    save_folder = "path/to/save_folder"
-    
-    make_inference(image_path, mask_path, onnx_model_path, save_folder)

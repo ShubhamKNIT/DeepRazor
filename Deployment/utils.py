@@ -8,17 +8,22 @@ import streamlit as st
 import zipfile
 import os
 import uuid
-import subprocess
 from pathlib import Path
+import tempfile
 
 # Ensure a unique session id exists
 if 'session_id' not in st.session_state:
     st.session_state['session_id'] = str(uuid.uuid4())
 
-# Define a unique folder using the session id
-RESULT_FOLDER = Path("results") / st.session_state['session_id']
+# Define a temporary directory for storing results.
+temp_dir = Path("/tmp")
+
+# Define a unique results folder inside the temp directory.
+RESULT_FOLDER = temp_dir / st.session_state['session_id']
 RESULT_FOLDER.mkdir(parents=True, exist_ok=True)
-RESULT_ZIP = f"results_{st.session_state['session_id'][:10]}.zip"
+
+# Define the path for the zip file (stored in the same temporary directory).
+RESULT_ZIP = temp_dir / f"results_{st.session_state['session_id'][:10]}.zip"
 
 def download_image(image, label="Download Image", filename="image.jpg", mime="image/jpeg"):
     # image = Image.fromarray(image)

@@ -7,6 +7,7 @@ from inpaint_anything_predicts import make_inference
 
 # Define global folder for results
 result_folder = os.path.join(RESULT_FOLDER, "inpainting_anything")
+onnx_model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "onnx_gen_models/ia_gen_55.onnx")
 os.makedirs(result_folder, exist_ok=True)
 st.title("Inpainting Prediction Interface")
 
@@ -22,8 +23,9 @@ if upload_browse == "Upload":
     uploaded_image = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
     uploaded_mask = st.file_uploader("Upload a Mask", type=["jpg", "jpeg", "png"])
 elif upload_browse == "Browse":
-    uploaded_image = st.selectbox("Select an image to inpaint:", list_all_files(RESULT_FOLDER))
-    uploaded_mask = st.selectbox("Select a mask to inpaint:", list_all_files(RESULT_FOLDER))
+    options = list_all_files(RESULT_FOLDER)
+    uploaded_image = st.selectbox("Select an image to inpaint:", options, key="img")
+    uploaded_mask = st.selectbox("Select a mask to inpaint:", options, key="mask")
 
 # Clear session state if image is removed
 if uploaded_image is None:
@@ -54,14 +56,12 @@ if st.button("Predict"):
         st.image(Image.open(image_path), caption="Original Image", use_container_width=True)
         st.image(Image.open(mask_path), caption="Mask", use_container_width=True)
         
-        # Set ONNX model path and create a unique results folder for this run
-        onnx_model_path = "onnx_gen_models/ia_gen_55.onnx"
         # Save results in a subfolder of RESULT_FOLDER
         save_folder = result_folder 
         os.makedirs(save_folder, exist_ok=True)
         
-        st.info("Running prediction... Please wait.")
-        make_inference(image_path, mask_path, onnx_model_path, save_folder)
+        with st.spinner("Running prediction..."):
+            make_inference(image_path, mask_path, onnx_model_path, save_folder)
         st.success("Prediction complete!")
         
         # Clean up temporary uploads

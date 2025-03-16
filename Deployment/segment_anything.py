@@ -8,8 +8,8 @@ from utils import download_image, preprocess_image, infuse_image_mask, add_selec
 # Define a global folder for saving all results.
 result_folder = f"{RESULT_FOLDER}/segment_anything"
 os.makedirs(result_folder, exist_ok=True)
+model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "yolo11m-seg.pt")
 
-@st.cache_resource
 def make_inference(img_path, model_path, classes=None):
     model = YOLO(model_path)
     # If classes is None, YOLO predicts all classes.
@@ -44,7 +44,8 @@ upload_browse = st.selectbox("Select an option", ["Upload", "Browse"])
 if upload_browse == "Upload":
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 elif upload_browse == "Browse":
-    uploaded_file = st.selectbox("Select an image to predict:", list_all_files(RESULT_FOLDER))
+    options = list_all_files(RESULT_FOLDER)
+    uploaded_file = st.selectbox("Select an image to predict:", options, key="img")
 
 # --- Class Selection with "Select All" Option ---
 class_dict = {
@@ -95,8 +96,8 @@ if uploaded_file is not None:
         st.session_state.img_path = uploaded_file
    
     if st.button("Predict Mask"):
-        with st.spinner("Running inference..."):
-            masks_paths = predict_mask(st.session_state.img_path, classes=classes, save_folder=result_folder)
+        with st.spinner(""):
+            masks_paths = predict_mask(st.session_state.img_path, model_path=model_path, classes=classes, save_folder=result_folder)
         st.session_state.masks_paths = masks_paths
         st.success("Inference complete!")
 
