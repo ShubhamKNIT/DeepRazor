@@ -5,6 +5,20 @@ from PIL import Image
 from io import BytesIO
 from torchvision import transforms
 import streamlit as st
+import zipfile
+import os
+import uuid
+import subprocess
+from pathlib import Path
+
+# Ensure a unique session id exists
+if 'session_id' not in st.session_state:
+    st.session_state['session_id'] = str(uuid.uuid4())
+
+# Define a unique folder using the session id
+RESULT_FOLDER = Path("results") / st.session_state['session_id']
+RESULT_FOLDER.mkdir(parents=True, exist_ok=True)
+RESULT_ZIP = f"results_{st.session_state['session_id'][:10]}.zip"
 
 def download_image(image, label="Download Image", filename="image.jpg", mime="image/jpeg"):
     # image = Image.fromarray(image)
@@ -24,6 +38,11 @@ def apply_transformation(img):
         transforms.ToTensor(),
     ])
     return transorm(img)
+
+def tensor_to_image(tensor):
+    np_img = tensor.cpu().numpy()
+    np_img = np.clip(np_img * 255, 0, 255).astype(np.uint8)
+    return np.transpose(np_img, (1, 2, 0))
 
 def preprocess_image(image_path, target_size=(640, 640), output_path="preprocessed.jpg"):
     image = cv2.imread(image_path)
@@ -45,7 +64,7 @@ def infuse_image_mask(img_path, mask_path, target_path="infused.jpg"):
     img_in.save(target_path)
     return target_path
 
-def add_selected_masks(mask_paths, img_path):
+def add_selected_masks(mask_paths, img_path, combined_mask_path="combined_mask.jpg", combined_infused_path="combined_infused.jpg"):
     """Combine multiple mask images and update the infused image based on the combined mask."""
     combined_mask = None
     for mask_path in mask_paths:
@@ -55,9 +74,8 @@ def add_selected_masks(mask_paths, img_path):
             combined_mask = current_mask
         else:
             combined_mask = np.maximum(combined_mask, current_mask)
-    combined_mask_path = "combined_mask.jpg"
     cv2.imwrite(combined_mask_path, combined_mask)
-    combined_infused = infuse_image_mask(img_path, combined_mask_path, target_path="combined_infused.jpg")
+    combined_infused = infuse_image_mask(img_path, combined_mask_path, target_path=combined_infused_path)
     return combined_mask, combined_infused
 
 def mask_to_json(mask: np.ndarray, stroke_width: int = 3, 
@@ -133,3 +151,22 @@ def mask_to_json(mask: np.ndarray, stroke_width: int = 3,
             }
             objects.append(obj)
     return {"version": "4.4.0", "objects": objects}
+
+def zip_results(results_folder, target_path="results.zip"):
+    """Zip the contents of a folder and save the archive to a target path."""
+    with zipfile.ZipFile(target_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(results_folder):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # Store the file in the zip archive with a path relative to results_folder.
+                arcname = os.path.relpath(file_path, results_folder)
+                zipf.write(file_path, arcname)
+    return target_path
+
+def list_all_files(directory):
+    """List all files in a directory and its subdirectories."""
+    files = []
+    for root, _, filenames in os.walk(directory):
+        for filename in filenames:
+            files.append(os.path.join(root, filename))
+    return files
