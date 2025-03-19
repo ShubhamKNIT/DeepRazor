@@ -1,51 +1,28 @@
-import os
 import streamlit as st
-from ultralytics import YOLO
 from PIL import Image
 import numpy as np
-from utils import download_image, preprocess_image, infuse_image_mask, add_selected_masks, zip_results, list_all_files, RESULT_FOLDER, RESULT_ZIP
+from io import BytesIO
+import zipfile
+from ultralytics import YOLO
+from utils import (
+    download_image,
+    preprocess_image, 
+    infuse_image_mask,
+    add_selected_masks, 
+    zip_files_in_session, 
+    file_selector,
+    save_file_in_session,
+    retrieve_file_from_session,
+    YOLO_MODEL_PATH,
+)
 
-# Define a global folder for saving all results.
-result_folder = f"{RESULT_FOLDER}/segment_anything"
-os.makedirs(result_folder, exist_ok=True)
-model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "yolo11m-seg.pt")
-
-def make_inference(img_path, model_path, classes=None):
-    model = YOLO(model_path)
-    # If classes is None, YOLO predicts all classes.
-    results = model(img_path, classes=classes)
-    return results
-
-def predict_mask(img_path, model_path="yolo11m-seg.pt", classes=None, save_folder=result_folder):
-    preprocessed_img_path = preprocess_image(img_path, target_size=(640, 640), output_path=os.path.join(save_folder, "preprocessed.jpg"))
-    results = make_inference(preprocessed_img_path, model_path, classes=classes)
-    masks = results[0].masks
-    masks_paths = []
-    for i, mask_obj in enumerate(masks):
-        mask_path = os.path.join(save_folder, f"mask_{i}.jpg")
-        mask_img = Image.fromarray(
-            (mask_obj.data.squeeze(0).cpu().numpy().astype(np.float32) * 255).astype(np.uint8)
-        ).convert("L")
-        mask_img.save(mask_path)
-        masks_paths.append(mask_path)
-    return masks_paths
-
-# ----- Streamlit App -----
+# --- Global Page Configuration ---
+page_name = "mask_prediction"
 st.title("Mask Prediction Tool")
+
+# Upload/Browse image file
 st.write("Upload an image to predict its mask.")
-
-# Initialize session state variables
-if "masks_paths" not in st.session_state:
-    st.session_state.masks_paths = None
-if "img_path" not in st.session_state:
-    st.session_state.img_path = None
-
-upload_browse = st.selectbox("Select an option", ["Upload", "Browse"])
-if upload_browse == "Upload":
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-elif upload_browse == "Browse":
-    options = list_all_files(RESULT_FOLDER)
-    uploaded_file = st.selectbox("Select an image to predict:", options, key="img")
+img_file, img_mode = file_selector("image", ["jpg", "jpeg", "png"], "img", category="all", page=page_name)
 
 # --- Class Selection with "Select All" Option ---
 class_dict = {
@@ -68,77 +45,95 @@ class_dict = {
 }
 inverse_class_dict = {v: k for k, v in class_dict.items()}
 
-# Checkbox to quickly select all classes
 select_all = st.checkbox("Select all classes", value=True)
 if select_all:
     _class_selector = list(class_dict.values())
 else:
     _class_selector = st.multiselect("Select classes to predict:", list(class_dict.values()))
 
-# Prevent none errors due to classes: if no class is selected, default to all classes.
 if not _class_selector:
     st.warning("No classes selected. Predicting for all classes.")
     classes = None
 else:
     classes = [inverse_class_dict[cls] for cls in _class_selector]
 
-if uploaded_file is not None:
-    if upload_browse == "Upload":
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_container_width=True)
-        img_path = uploaded_file.name
-        # Save the uploaded image to result_folder so all results go in the same folder.
-        image.save(os.path.join(result_folder, img_path))
-        st.session_state.img_path = os.path.join(result_folder, img_path)
-    elif upload_browse == "Browse":
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Selected Image", use_container_width=True)
-        st.session_state.img_path = uploaded_file
-   
+# --- Process the Uploaded Image ---
+prefix = "prefix"  # default prefix
+if img_file is not None:
+    if img_mode == "Upload":
+        image = Image.open(img_file).convert("RGB")
+        prefix = img_file.name.split('.')[0]
+        st.session_state.img_bytes = img_file.getvalue()
+        save_file_in_session(img_file.name, st.session_state.img_bytes, category="uploaded", page=page_name)
+    elif img_mode == "Browse":
+        image = Image.open(BytesIO(img_file)).convert("RGB")
+        prefix = st.text_input("Enter prefix for output files:", value="output")
+        st.session_state.img_bytes = img_file
+    st.image(image, caption="Uploaded Image", use_container_width=True)
+
     if st.button("Predict Mask"):
-        with st.spinner(""):
-            masks_paths = predict_mask(st.session_state.img_path, model_path=model_path, classes=classes, save_folder=result_folder)
-        st.session_state.masks_paths = masks_paths
+        with st.spinner("Predicting mask..."):
+            # Preprocess image (returns bytes).
+            preprocessed_bytes = preprocess_image(st.session_state.img_bytes, target_size=(640, 640))
+            preprocessed_image = Image.open(BytesIO(preprocessed_bytes)).convert("RGB")
+            
+            # Run inference with YOLO.
+            model = YOLO(YOLO_MODEL_PATH)
+            results = model(preprocessed_image, classes=classes)
+            masks = results[0].masks
+            
+            mask_keys = []
+            for i, mask_obj in enumerate(masks):
+                mask_array = (mask_obj.data.squeeze(0).cpu().numpy().astype(np.float32) * 255).astype(np.uint8)
+                mask_img = Image.fromarray(mask_array).convert("L")
+                buf = BytesIO()
+                mask_img.save(buf, format="JPEG")
+                mask_bytes = buf.getvalue()
+                # Save each predicted mask under "generated" for the current page.
+                file_name = f"{prefix}_mask_{i}.jpg"
+                save_file_in_session(file_name, mask_bytes, category="generated", page=page_name)
+                mask_keys.append(file_name)
+            st.session_state.masks_keys = mask_keys
         st.success("Inference complete!")
 
 # --- Mask Selection & Updating Infused Image ---
-if st.session_state.masks_paths is not None:
-    # Create a list of mask options (e.g., "Mask 0", "Mask 1", ...)
-    options = [f"Mask {i}" for i in range(len(st.session_state.masks_paths))]
+if st.session_state.get("masks_keys"):
+    options = [f"Mask {i}" for i in range(len(st.session_state.masks_keys))]
     selected_options = st.multiselect("Select one or more mask(s) to view or combine:", options, default=options[0])
     
     if selected_options:
-        # Convert selections to indices
-        selected_indices = [int(option.split(" ")[-1]) for option in selected_options]
+        selected_indices = [int(opt.split(" ")[-1]) for opt in selected_options]
         if len(selected_indices) == 1:
-            # Single mask selection: update the infused image for the selected mask.
-            selected_mask_path = st.session_state.masks_paths[selected_indices[0]]
-            st.image(selected_mask_path, caption=f"Selected Mask {selected_indices[0]}", use_container_width=True)
-            infused_path = infuse_image_mask(st.session_state.img_path, selected_mask_path, 
-                                              target_path=os.path.join(result_folder, f"infused_{selected_indices[0]}.jpg"))
-            st.image(infused_path, caption=f"Infused Image for Mask {selected_indices[0]}", use_container_width=True)
-            mask = Image.open(selected_mask_path)
-            download_image(mask, label="Download Selected Mask", filename=f"mask_{selected_indices[0]}.jpg", mime="image/jpeg")
-            infused_img = Image.open(infused_path)
-            download_image(infused_img, label="Download Infused Image", filename=f"infused_{selected_indices[0]}.jpg", mime="image/jpeg")
+            mask_bytes = retrieve_file_from_session(st.session_state.masks_keys[selected_indices[0]], category="generated", page=page_name)
+            infused_bytes = infuse_image_mask(st.session_state.img_bytes, mask_bytes)
         else:
-            # Multiple mask selection: combine masks and update the infused image.
-            selected_mask_paths = [st.session_state.masks_paths[i] for i in selected_indices]
-            combined_mask, combined_infused_path = add_selected_masks(selected_mask_paths, st.session_state.img_path, 
-                                                                      combined_mask_path=os.path.join(result_folder, "combined_mask.jpg"), 
-                                                                      combined_infused_path=os.path.join(result_folder, "combined_infused.jpg"))
-            combined_mask_img = Image.fromarray(combined_mask.astype(np.uint8))
-            st.image(combined_mask_img, caption="Combined Mask", use_container_width=True)
-            st.image(combined_infused_path, caption="Infused Image for Combined Mask", use_container_width=True)
-            download_image(combined_mask_img, label="Download Combined Mask", filename="combined_mask.jpg", mime="image/jpeg")
-            combined_infused_img = Image.open(os.path.join(result_folder, "combined_infused.jpg"))
-            download_image(combined_infused_img, label="Download Combined Infused Image", filename="combined_infused.jpg", mime="image/jpeg")
-        
-    zip_path = zip_results(RESULT_FOLDER, target_path=RESULT_ZIP)
-    with open(zip_path, "rb") as zip_file:
-        st.download_button(
-            label="Download All Results as Zip",
-            data=zip_file,
-            file_name=os.path.basename(zip_path),
-            mime="application/zip"
-        )
+            selected_mask_bytes = [
+                retrieve_file_from_session(st.session_state.masks_keys[i], category="generated", page=page_name)
+                for i in selected_indices
+            ]
+            combined_mask_bytes, combined_infused_bytes = add_selected_masks(selected_mask_bytes, st.session_state.img_bytes)
+            mask_bytes = combined_mask_bytes
+            infused_bytes = combined_infused_bytes
+
+        # Save outputs under "generated" for the current page.
+        pred_mask_name = f"{prefix}_predicted_mask.jpg"
+        pred_infused_name = f"{prefix}_predicted_infused.jpg"
+        save_file_in_session(pred_mask_name, mask_bytes, category="generated", page=page_name)
+        save_file_in_session(pred_infused_name, infused_bytes, category="generated", page=page_name)
+
+        st.image(mask_bytes, caption="Selected/Combined Mask", use_container_width=True)
+        st.image(infused_bytes, caption="Infused Image", use_container_width=True)
+
+        mask_img = Image.open(BytesIO(mask_bytes))
+        download_image(mask_img, label="Download Predicted Mask", filename=pred_mask_name, mime="image/jpeg")
+        infused_img = Image.open(BytesIO(infused_bytes))
+        download_image(infused_img, label="Download Predicted Infused Image", filename=pred_infused_name, mime="image/jpeg")
+    
+    # Create a ZIP archive for all generated files across pages.
+    zip_buffer = zip_files_in_session(category="all")
+    st.download_button(
+        label="Download All Results as Zip",
+        data=zip_buffer,
+        file_name="results.zip",
+        mime="application/zip"
+    )

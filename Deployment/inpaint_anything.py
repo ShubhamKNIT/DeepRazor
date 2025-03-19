@@ -1,102 +1,91 @@
-import os
-import shutil
 import streamlit as st
 from PIL import Image
-from utils import zip_results, list_all_files, RESULT_FOLDER, RESULT_ZIP
-from inpaint_anything_predicts import make_inference
+from io import BytesIO
+from utils import (
+    file_selector, 
+    download_image, 
+    save_file_in_session, 
+    zip_files_in_session,
+    ONNX_MODEL_PATH,
+)
+from inpaint_anything_predicts import make_inference 
 
-# Define global folder for results
-result_folder = os.path.join(RESULT_FOLDER, "inpainting_anything")
-onnx_model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "onnx_gen_models/ia_gen_55.onnx")
-os.makedirs(result_folder, exist_ok=True)
+# Set the page name for hierarchical file storage.
+page_name = "inpainting_prediction"
 st.title("Inpainting Prediction Interface")
 
-# Initialize session state variables
+# Initialize session state for image, mask, and result files.
+if "img_bytes" not in st.session_state:
+    st.session_state["img_bytes"] = None
+if "mask_bytes" not in st.session_state:
+    st.session_state["mask_bytes"] = None
 if "result_files" not in st.session_state:
-    st.session_state.result_files = None
-if "save_folder" not in st.session_state:
-    st.session_state.save_folder = None
+    st.session_state["result_files"] = {}  # dictionary: filename -> image bytes
 
-# Upload image and mask files
-upload_browse = st.selectbox("Select an option", ["Upload", "Browse"])
-if upload_browse == "Upload":
-    uploaded_image = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
-    uploaded_mask = st.file_uploader("Upload a Mask", type=["jpg", "jpeg", "png"])
-elif upload_browse == "Browse":
-    options = list_all_files(RESULT_FOLDER)
-    uploaded_image = st.selectbox("Select an image to inpaint:", options, key="img")
-    uploaded_mask = st.selectbox("Select a mask to inpaint:", options, key="mask")
+# Upload/Browse image and mask files.
+uploaded_image, mode_img = file_selector("image", ["jpg", "jpeg", "png"], "img", category="all", page=page_name)
+uploaded_mask, mode_mask = file_selector("mask", ["png"], "mask", category="all", page=page_name)
 
-# Clear session state if image is removed
-if uploaded_image is None:
-    st.session_state.result_files = None
-    st.session_state.save_folder = None
+# When an image is available, display it and store its bytes.
+if uploaded_image is not None:
+    if mode_img == "Upload":
+        img_bytes = uploaded_image.getvalue()
+    else:
+        img_bytes = uploaded_image
+    st.session_state["img_bytes"] = img_bytes
+    image = Image.open(BytesIO(img_bytes)).convert("RGB")
+    st.image(image, caption="Original Image", use_container_width=True)
 
-# Run prediction if both image and mask are uploaded
+# When a mask is available, display it and store its bytes.
+if uploaded_mask is not None:
+    if mode_mask == "Upload":
+        mask_bytes = uploaded_mask.getvalue()
+    else:
+        mask_bytes = uploaded_mask
+    st.session_state["mask_bytes"] = mask_bytes
+    mask = Image.open(BytesIO(mask_bytes)).convert("L")
+    st.image(mask, caption="Mask", use_container_width=True)
+
+# Run prediction when the user clicks the button.
 if st.button("Predict"):
-    if uploaded_image is None or uploaded_mask is None:
+    if st.session_state["img_bytes"] is None or st.session_state["mask_bytes"] is None:
         st.error("Please upload both an image and a mask.")
     else:
-        # Create a temporary folder for uploads
-        temp_folder = "temp_uploads"
-        os.makedirs(temp_folder, exist_ok=True)
-        
-        # Save uploaded files to disk
-        if upload_browse == "Upload":
-            image_path = os.path.join(temp_folder, uploaded_image.name)
-            mask_path = os.path.join(temp_folder, uploaded_mask.name)
-            with open(image_path, "wb") as f:
-                f.write(uploaded_image.getvalue())
-            with open(mask_path, "wb") as f:
-                f.write(uploaded_mask.getvalue())
-        elif upload_browse == "Browse":
-            image_path = uploaded_image
-            mask_path = uploaded_mask
-
-        st.image(Image.open(image_path), caption="Original Image", use_container_width=True)
-        st.image(Image.open(mask_path), caption="Mask", use_container_width=True)
-        
-        # Save results in a subfolder of RESULT_FOLDER
-        save_folder = result_folder 
-        os.makedirs(save_folder, exist_ok=True)
-        
         with st.spinner("Running prediction..."):
-            make_inference(image_path, mask_path, onnx_model_path, save_folder)
+            result_dict = make_inference(
+                st.session_state["img_bytes"],
+                st.session_state["mask_bytes"],
+                onnx_model_path=ONNX_MODEL_PATH
+            )
+            # Save each result under the current page in the "generated" category.
+            for fname, fbytes in result_dict.items():
+                save_file_in_session(fname, fbytes, category="generated", page=page_name)
+            st.session_state["result_files"] = result_dict
         st.success("Prediction complete!")
-        
-        # Clean up temporary uploads
-        shutil.rmtree(temp_folder)
-        
-        # Save result file names in session state
-        result_files = sorted([f for f in os.listdir(save_folder) if f.lower().endswith((".jpg", ".png"))])
-        st.session_state.result_files = result_files
-        st.session_state.save_folder = save_folder
 
-if st.session_state.result_files is not None and st.session_state.save_folder is not None:
+# If results exist, display them and provide download options.
+if st.session_state.get("result_files"):
     st.subheader("Results")
-    num_results = len(st.session_state.result_files)
-    idx = st.slider("Select result", 0, num_results - 1, 0)
-    
-    # Construct the path to the selected result image
-    result_image_path = os.path.join(st.session_state.save_folder, st.session_state.result_files[idx])
-    result_img = Image.open(result_image_path)
-    st.image(result_img, caption=st.session_state.result_files[idx], use_container_width=True)
-    
-    # Provide download button for individual result image
-    with open(result_image_path, "rb") as file:
-        st.download_button(
-            label="Download this image",
-            data=file,
-            file_name=st.session_state.result_files[idx],
-            mime="image/jpeg" if st.session_state.result_files[idx].lower().endswith("jpg") else "image/png"
-        )
-    
-    # Provide a ZIP download button for all results
-    zip_path = zip_results(RESULT_FOLDER, target_path=RESULT_ZIP)
-    with open(zip_path, "rb") as zip_file:
-        st.download_button(
-            label="Download All Results as Zip",
-            data=zip_file,
-            file_name=os.path.basename(zip_path),
-            mime="application/zip"
-        )
+    result_keys = list(st.session_state["result_files"].keys())
+    idx = st.slider("Select result", 0, len(result_keys) - 1, 0)
+    selected_key = result_keys[idx]
+    result_bytes = st.session_state["result_files"][selected_key]
+    result_img = Image.open(BytesIO(result_bytes))
+    st.image(result_img, caption=selected_key, use_container_width=True)
+
+    # Provide a download button for the selected result image.
+    download_image(
+        result_img,
+        label="Download this image",
+        filename=selected_key,
+        mime="image/jpeg" if selected_key.lower().endswith("jpg") else "image/png"
+    )
+
+    # Create an in-memory ZIP archive for all result files across all pages.
+    zip_buffer = zip_files_in_session(category="all")
+    st.download_button(
+        label="Download Results as Zip",
+        data=zip_buffer,
+        file_name="results.zip",
+        mime="application/zip"
+    )
