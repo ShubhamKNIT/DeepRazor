@@ -2,10 +2,12 @@ import streamlit as st
 
 how_to_use_page = st.Page("./how_to_use.py", title="How to Use")
 draw_mask_page = st.Page("./draw_mask.py", title="Draw Mask")
-yolo_page = st.Page("./segment_anything.py", title="YOLO Perdicts Mask")
+yolo_page = st.Page("./segment_anything.py", title="YOLO Predicts Mask")
 inpaint_page = st.Page("./inpaint_anything.py", title="Inpaint Anything")
+standard_model_page = st.Page("./standard_model_code/app.py", title="Point-Click Inpainting")
 
 pg = st.navigation({
-    "Select a tool": [how_to_use_page, draw_mask_page, yolo_page, inpaint_page],
+    "Select a tool": [how_to_use_page, draw_mask_page, yolo_page, inpaint_page, standard_model_page],
 })
+
 pg.run()
