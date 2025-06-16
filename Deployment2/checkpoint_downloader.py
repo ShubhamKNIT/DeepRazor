@@ -33,33 +33,33 @@ def download_all_checkpoints(destination_dir: str = "./checkpoints"):
     create_directory(destination_dir)
     downloaded = []
 
-    # # 1. SAM2.1 weights
-    # downloaded.append(download_file(
-    #     repo_id="facebook/sam2.1-hiera-large",
-    #     filename="sam2.1_hiera_large.pt",
-    #     dest_dir=destination_dir
-    # ))
+    # 1. SAM2.1 weights
+    downloaded.append(download_file(
+        repo_id="facebook/sam2.1-hiera-large",
+        filename="sam2.1_hiera_large.pt",
+        dest_dir=destination_dir
+    ))
 
-    # # 2. SAM2.1 config
-    # downloaded.append(download_file(
-    #     repo_id="facebook/sam2.1-hiera-large",
-    #     filename="sam2.1_hiera_l.yaml",
-    #     dest_dir=destination_dir
-    # ))
+    # 2. SAM2.1 config
+    downloaded.append(download_file(
+        repo_id="facebook/sam2.1-hiera-large",
+        filename="sam2.1_hiera_l.yaml",
+        dest_dir=destination_dir
+    ))
 
-    # # 3. Big-Lama checkpoint
-    # downloaded.append(download_file(
-    #     repo_id="HV-Khurdula/big-lama",
-    #     filename="best.ckpt",
-    #     dest_dir=destination_dir+"/big-lama/models"
-    # ))
+    # 3. Big-Lama checkpoint
+    downloaded.append(download_file(
+        repo_id="HV-Khurdula/big-lama",
+        filename="best.ckpt",
+        dest_dir=destination_dir+"/big-lama/models"
+    ))
 
-    # # 4. Big-Lama config
-    # downloaded.append(download_file(
-    #     repo_id="HV-Khurdula/big-lama",
-    #     filename="config.yaml",
-    #     dest_dir=destination_dir+"/big-lama"
-    # ))
+    # 4. Big-Lama config
+    downloaded.append(download_file(
+        repo_id="HV-Khurdula/big-lama",
+        filename="config.yaml",
+        dest_dir=destination_dir+"/big-lama"
+    ))
 
     print(f"\n🎉 Downloaded {len(downloaded)} files into `{destination_dir}`")
     return downloaded

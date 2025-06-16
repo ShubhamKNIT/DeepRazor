@@ -70,8 +70,9 @@ def predict_masks_with_sam(
     point_coords = np.array(point_coords)
     point_labels = np.array(point_labels)
 
-    sam2_checkpoint = r"C:/projects_github/DeepRazor/Deployment2/checkpoints/sam2.1_hiera_large.pt"
-    model_cfg = r"C:/projects_github/DeepRazor/Deployment2/checkpoints/sam2.1_hiera_l.yaml"
+    base_dir = Path(__file__).parent / "checkpoints"
+    sam2_checkpoint = str(base_dir / "sam2.1_hiera_large.pt")
+    model_cfg = str(base_dir / "sam2.1_hiera_l.yaml")
     # sam2_checkpoint = "/pretrained_model/checkpoints/sam2.1_hiera_large.pt"
     # model_cfg = "/content/sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml"
 

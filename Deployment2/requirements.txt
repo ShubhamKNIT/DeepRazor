@@ -20,4 +20,6 @@ webdataset
 packaging
 wldhx.yadisk-direct
 matplotlib	
--e segment_anything2
+-e git+https://github.com/facebookresearch/sam2.git#egg=sam-2
+streamlit-image-coordinates
+huggingface-hub
