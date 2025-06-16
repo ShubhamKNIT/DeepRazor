@@ -95,6 +95,8 @@ def check_and_download_checkpoints():
                 # Clear progress indicators
                 progress_placeholder.empty()
                 status_placeholder.empty()
+
+                st.rerun()
                 
                 return True
             else:
